@@ -1,12 +1,13 @@
 from openai import OpenAI
 from .ai_provider import AIProvider
+import os
 
 class NvidiaProvider(AIProvider):
     def __init__(self):
-            self.client = OpenAI(
-                base_url = "https://integrate.api.nvidia.com/v1",
-                api_key = "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"
-            )
+        self.client = OpenAI(
+            base_url = "https://integrate.api.nvidia.com/v1",
+            api_key = os.getenv("NVIDIA_KEY")
+        )
 
     def create_completion(self, messages, model, temperature=0.7, max_tokens=None):
         try:

@@ -5,9 +5,9 @@ class OllamaProvider(AIProvider):
     def __init__(self, host='http://localhost:11434'):
         self.client = ollama.Client(host=host)
 
-    def create_completion(self, model, prompt):
+    def create_completion(self, messages, model, temperature=0.7, max_tokens=None):
         try:
-            response = self.client.generate(model=model, prompt=prompt)
+            response = self.client.generate(model=model, prompt=messages[-1]['content'])
             return response['response']
         except Exception as e:
             print(f"Connection Error: {e}")
