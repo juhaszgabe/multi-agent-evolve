@@ -1,12 +1,14 @@
 from openai import OpenAI
 from .ai_provider import AIProvider
+from dotenv import load_dotenv
 import os
 
 class NvidiaProvider(AIProvider):
     def __init__(self):
+        load_dotenv()  # .env fájl betöltése a környezeti változók közé
         self.client = OpenAI(
             base_url = "https://integrate.api.nvidia.com/v1",
-            api_key = os.getenv("NVIDIA_KEY")
+            api_key = os.getenv("OPENAI_API_KEY")
         )
 
     def create_completion(self, messages, model, temperature=0.7, max_tokens=None):
