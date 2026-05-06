@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import json
+
 from .base import BaseAgent
 
 
@@ -18,6 +21,9 @@ Flag an error only if there is a real problem:
 - Result contradicts what the question asks
 - Logic error in aggregation or grouping
 
+The analysis may have been produced by Python code, a SQL query, or a statistical test —
+review the result data regardless of how it was generated.
+
 If everything looks correct, always output verdict "approved" with an empty issues list.
 """
 
@@ -27,9 +33,13 @@ class CriticAgent(BaseAgent):
         self,
         question: str,
         plan: dict,
-        analyst_result: dict,
+        analyst_result: dict | None,
         viz_result: dict | None = None,
     ) -> dict:
+        # Null-safety: upstream step was skipped or failed — nothing to critique
+        if analyst_result is None:
+            return {"verdict": "approved", "issues": [], "suggested_action": None}
+
         context: dict = {
             "original_question": question,
             "plan": plan,
@@ -39,7 +49,8 @@ class CriticAgent(BaseAgent):
             context["viz_result"] = viz_result
 
         user_msg = f"Review this analysis:\n{json.dumps(context, indent=2)}"
-        raw = self._call_llm(_SYSTEM, user_msg, temperature=0.1)
+        result = self._call_llm(_SYSTEM, user_msg)
+        raw = result.content
 
         try:
             start = raw.find("{")

@@ -1,18 +1,28 @@
-# Universal AI provider interface that will be realised by concrete implementations
 from abc import abstractmethod
+from dataclasses import dataclass
+
+
+@dataclass
+class CompletionResult:
+    content: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+
 
 class AIProvider:
     @abstractmethod
-    def create_completion(self, messages, model, temperature=0.7, max_tokens=None):
-        """Generate chat completions from messages."""
-        raise NotImplementedError("Subclasses must implement create_completion")
+    def create_completion(
+        self, messages: list, model: str, temperature: float = 0.1, max_tokens: int | None = None
+    ) -> CompletionResult:
+        """Generate a chat completion. Returns content + token usage."""
+        raise NotImplementedError
 
     @abstractmethod
-    def create_single_embedding(self, text, model):
+    def create_single_embedding(self, text: str, model: str) -> list:
         """Generate a single embedding for text."""
-        raise NotImplementedError("Subclasses must implement create_single_embedding")
-    
+        raise NotImplementedError
+
     @abstractmethod
-    def create_embeddings(self, texts, model):
+    def create_embeddings(self, texts: list, model: str) -> list:
         """Generate embeddings for a list of texts."""
-        raise NotImplementedError("Subclasses must implement create_embeddings")
+        raise NotImplementedError

@@ -1,18 +1,22 @@
-from ai_providers.ai_provider import AIProvider
+from __future__ import annotations
+
+from ai_providers.ai_provider import AIProvider, CompletionResult
+from config import Config
 
 
 class BaseAgent:
-    def __init__(self, provider: AIProvider, model: str):
+    def __init__(self, provider: AIProvider, model: str, config: Config):
         self.provider = provider
         self.model = model
+        self.config = config
 
-    def _call_llm(self, system: str, user: str, temperature: float = 0.3) -> str:
+    def _call_llm(self, system: str, user: str, temperature: float | None = None) -> CompletionResult:
+        t = temperature if temperature is not None else self.config.temperature
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ]
-        result = self.provider.create_completion(messages=messages, model=self.model, temperature=temperature)
-        return result or ""
+        return self.provider.create_completion(messages=messages, model=self.model, temperature=t)
 
     @staticmethod
     def _strip_code_fences(text: str) -> str:
