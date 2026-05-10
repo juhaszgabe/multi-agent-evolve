@@ -43,7 +43,13 @@ def _build_router(config):
         default_action = RouterAction("data_analysis", "python_sandbox")
         return StaticRouter({"default": default_action})
     elif config.router_type == "bandit":
-        return BanditRouter()
+        from router import BanditRouter
+        action_space = [RouterAction(a["agent_role"], a["tool_name"]) for a in config.action_space]
+        return BanditRouter(
+            action_space=action_space,
+            alpha=config.bandit_alpha,
+            state_path=config.bandit_state_path,
+        )
     else:
         raise ValueError(f"Unknown router_type: {config.router_type!r}")
 

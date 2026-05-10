@@ -45,6 +45,29 @@ Output ONLY executable Python code. No explanations, no markdown fences.
 
 
 class DataAnalystAgent(BaseAgent):
+    def __init__(self, provider, model, config, skill_library=None, error_catalog=None):
+        super().__init__(provider, model, config)
+        self._skills = skill_library
+        self._errors = error_catalog
+
+    def _build_memory_prefix(self, task: str) -> str:
+        skills = self._skills.retrieve(task) if self._skills else []
+        errors = self._errors.retrieve(task) if self._errors else []
+        if not skills and not errors:
+            return ""
+        parts = []
+        if skills:
+            lines = ["## Prior successful solutions for similar tasks:"]
+            for i, s in enumerate(skills, 1):
+                lines.append(f"{i}. Task: \"{s['task']}\"\n   Code:\n```python\n{s['code']}\n```")
+            parts.append("\n".join(lines))
+        if errors:
+            lines = ["## Known errors to avoid for similar tasks:"]
+            for i, e in enumerate(errors, 1):
+                lines.append(f"{i}. Error: \"{e['error_description']}\" | Fix: \"{e['fix']}\"")
+            parts.append("\n".join(lines))
+        return "\n\n".join(parts) + "\n\n---\n\n"
+
     def analyze(
         self,
         task: str,
@@ -69,10 +92,11 @@ class DataAnalystAgent(BaseAgent):
 
     # ------------------------------------------------------------------
     def _analyze_python(self, task, context, max_retries):
+        effective_system = self._build_memory_prefix(task) + _SYSTEM_PYTHON
         user_msg = f"Task: {task}\n\n{context}"
         code = ""
         for attempt in range(max_retries):
-            result = self._call_llm(_SYSTEM_PYTHON, user_msg)
+            result = self._call_llm(effective_system, user_msg)
             code = self._strip_code_fences(result.content)
             sandbox_result = PYTHON_SANDBOX_TOOL.fn(code)
             if sandbox_result.success:
@@ -95,10 +119,11 @@ class DataAnalystAgent(BaseAgent):
                 "input_tokens": 0, "output_tokens": 0}
 
     def _analyze_sql(self, task, csv_path, context, max_retries):
+        effective_system = self._build_memory_prefix(task) + _SYSTEM_SQL
         user_msg = f"Task: {task}\n\n{context}\n\nTable name in SQLite: 'data'"
         query = ""
         for attempt in range(max_retries):
-            result = self._call_llm(_SYSTEM_SQL, user_msg)
+            result = self._call_llm(effective_system, user_msg)
             query = result.content.strip().strip(";")
             sql_result = SQL_QUERY_TOOL.fn(query, csv_path)
             if sql_result.success:
@@ -119,6 +144,7 @@ class DataAnalystAgent(BaseAgent):
                 "input_tokens": 0, "output_tokens": 0}
 
     def _analyze_scipy(self, task, context, max_retries):
+        effective_system = self._build_memory_prefix(task) + _SYSTEM_SCIPY
         preamble = (
             "import sys, os\n"
             "sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))\n"
@@ -128,7 +154,7 @@ class DataAnalystAgent(BaseAgent):
         user_msg = f"Task: {task}\n\n{context}"
         code = ""
         for attempt in range(max_retries):
-            result = self._call_llm(_SYSTEM_SCIPY, user_msg)
+            result = self._call_llm(effective_system, user_msg)
             code = self._strip_code_fences(result.content)
             full_code = preamble + code
             sandbox_result = PYTHON_SANDBOX_TOOL.fn(full_code)

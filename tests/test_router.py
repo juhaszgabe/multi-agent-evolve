@@ -92,17 +92,3 @@ def test_static_router_requires_default_key():
         StaticRouter({"aggregation": RouterAction("data_analysis", "sql_query")})
 
 
-# ---------------------------------------------------------------------------
-# BanditRouter stub
-# ---------------------------------------------------------------------------
-
-def test_bandit_router_raises_not_implemented():
-    router = BanditRouter()
-    with pytest.raises(NotImplementedError):
-        router.select_action(_dummy_state())
-
-
-def test_bandit_router_update_raises_not_implemented():
-    router = BanditRouter()
-    with pytest.raises(NotImplementedError):
-        router.update(_dummy_state(), RouterAction("data_analysis", "python_sandbox"), 1.0)

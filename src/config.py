@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
+from typing import Optional
 
 
 def _default_model_per_role() -> dict:
@@ -53,6 +54,14 @@ class Config:
 
     # Reproducibility
     random_seed: int = 42
+
+    # BanditRouter
+    bandit_alpha: float = 0.25
+    bandit_state_path: Optional[str] = None  # .npz file; None = in-memory only
+
+    # Skill/error memory (requires pip install .[memory])
+    enable_memory: bool = False
+    skill_write_threshold: float = 0.8
 
 
 def load_config(path: str | None = None) -> Config:

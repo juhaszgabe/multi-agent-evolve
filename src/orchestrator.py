@@ -170,6 +170,8 @@ def make_execute_node(
     extractor: TaskStateExtractor,
     reward_fn: RewardFunction,
     log_dir: str,
+    skill_library=None,
+    error_catalog=None,
 ):
     # Role → agent callable mapping — no if-elif chains
     def _dispatch(role, action, step, state):
@@ -313,6 +315,19 @@ def make_execute_node(
             if verdict == "approved":
                 critic_approved = True
             elif verdict == "needs_revision":
+                if error_catalog is not None:
+                    issues = result.get("issues", []) if isinstance(result, dict) else []
+                    for dep_id in step.get("depends_on", []):
+                        dep_res = state["step_results"].get(str(dep_id)) or {}
+                        if isinstance(dep_res, dict) and not dep_res.get("skipped"):
+                            error_catalog.add(
+                                task=_step_by_id(state, dep_id)["task"],
+                                bad_code=dep_res.get("code", ""),
+                                error_description="; ".join(issues),
+                                fix=result.get("suggested_action") or "",
+                                workflow_id=state["workflow_id"],
+                                step_id=sid,
+                            )
                 action_str = result.get("suggested_action", "") if isinstance(result, dict) else ""
                 target_role = "data_analysis" if action_str == "rerun_data_analyst" else None
                 for dep_id in step.get("depends_on", []):
@@ -357,7 +372,7 @@ def make_execute_node(
     return execute_node
 
 
-def make_finalize_node(router: Router, reward_fn: RewardFunction, log_dir: str):
+def make_finalize_node(router: Router, reward_fn: RewardFunction, log_dir: str, skill_library=None):
     def finalize_node(state: SystemState) -> dict:
         total_latency = sum(r.get("latency_ms", 0) for r in state["step_records"])
         total_cost = sum(r.get("cost_estimate_usd", 0.0) for r in state["step_records"])
@@ -390,6 +405,18 @@ def make_finalize_node(router: Router, reward_fn: RewardFunction, log_dir: str):
             action = _dict_to_action(upd["action"])
             router.update(ts, action, reward)
 
+        if skill_library is not None:
+            cfg = config_from_dict(state["config"])
+            for record, reward in zip(records, rewards):
+                if reward >= cfg.skill_write_threshold and record.success:
+                    code = (record.tool_output or {}).get("code", "")
+                    task = (record.tool_input or {}).get("task", "")
+                    if task and code:
+                        skill_library.add(
+                            task=task, code=code, reward=reward,
+                            workflow_id=state["workflow_id"],
+                        )
+
         save_workflow_summary(outcome, log_dir)
         print(f"[Orchestrator] Workflow {state['workflow_id']} complete | "
               f"cost=${total_cost:.4f} | latency={total_latency}ms")
@@ -418,10 +445,22 @@ def build_graph(
     router: Router | None = None,
 ):
     planner = PlannerAgent(provider, config.model_per_role["planner"], config)
-    analyst = DataAnalystAgent(provider, config.model_per_role["data_analysis"], config)
     visualizer = VisualizerAgent(provider, config.model_per_role["visualization"], config)
     critic = CriticAgent(provider, config.model_per_role["verification"], config)
     writer = WriterAgent(provider, config.model_per_role["synthesis"], config)
+
+    skill_lib = None
+    error_cat = None
+    if config.enable_memory:
+        from memory import SkillLibrary, ErrorCatalog
+        mem_root = os.path.join(log_dir, "memory")
+        skill_lib = SkillLibrary(persist_dir=os.path.join(mem_root, "skills"))
+        error_cat = ErrorCatalog(persist_dir=os.path.join(mem_root, "errors"))
+
+    analyst = DataAnalystAgent(
+        provider, config.model_per_role["data_analysis"], config,
+        skill_library=skill_lib, error_catalog=error_cat,
+    )
 
     effective_router: Router = router or PlannerRouter()
     extractor = TaskStateExtractor()
@@ -436,8 +475,10 @@ def build_graph(
     graph.add_node("execute_step", make_execute_node(
         analyst, visualizer, critic, writer,
         effective_router, extractor, reward_fn, log_dir,
+        skill_library=skill_lib, error_catalog=error_cat,
     ))
-    graph.add_node("finalize", make_finalize_node(effective_router, reward_fn, log_dir))
+    graph.add_node("finalize", make_finalize_node(effective_router, reward_fn, log_dir,
+                                                   skill_library=skill_lib))
 
     graph.add_edge(START, "init")
     graph.add_edge("init", "find_next_step")
